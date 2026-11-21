@@ -1,0 +1,357 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Public non-PII CTF operator profile with role-based access control metadata.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Authentication user ID."
+        },
+        "handle": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Unique CTF callsign or handle."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Display name shown in Swarm sessions and leaderboard."
+        },
+        "teamName": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 64,
+          "description": "Optional CTF team affiliation."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["player", "organizer", "admin"],
+          "description": "Access control role governed by admins."
+        },
+        "requestedRole": {
+          "type": "string",
+          "enum": ["none", "organizer"],
+          "description": "Pending elevation request submitted by a player."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "suspended"],
+          "description": "Account operational status controlled by administrators."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when account was registered."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last profile update."
+        }
+      },
+      "required": ["uid", "handle", "displayName", "teamName", "role", "requestedRole", "status", "createdAt", "updatedAt"]
+    },
+    "UserPrivateAccount": {
+      "title": "UserPrivateAccount",
+      "description": "Isolated PII document storing sensitive account details strictly accessible to owner and admins.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Owner UID."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 254,
+          "description": "Private email address."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update."
+        }
+      },
+      "required": ["uid", "email", "updatedAt"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Authoritative administrator membership document used for RBAC verification.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Administrator UID."
+        },
+        "grantedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "UID or bootstrap identifier that granted admin privileges."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when admin access was granted."
+        }
+      },
+      "required": ["uid", "grantedBy", "createdAt"]
+    },
+    "OrganizerRecord": {
+      "title": "OrganizerRecord",
+      "description": "Authoritative organizer membership document used for challenge management RBAC.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Organizer UID."
+        },
+        "grantedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "UID of admin who granted organizer privileges."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when organizer access was granted."
+        }
+      },
+      "required": ["uid", "grantedBy", "createdAt"]
+    },
+    "Challenge": {
+      "title": "Challenge",
+      "description": "CTF learning module or Nightmare binary exploitation challenge managed by organizers and admins.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Challenge slug ID."
+        },
+        "moduleNum": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 12,
+          "description": "Module index such as 00 through 10."
+        },
+        "moduleName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100,
+          "description": "Parent Nightmare module name."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120,
+          "description": "Challenge title."
+        },
+        "category": {
+          "type": "string",
+          "enum": ["Reversing", "Stack", "ROP", "Format", "Heap", "Mitigations"],
+          "description": "Exploitation or reverse engineering discipline."
+        },
+        "difficulty": {
+          "type": "string",
+          "enum": ["Beginner", "Intermediate", "Advanced"],
+          "description": "Difficulty tier."
+        },
+        "arch": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 32,
+          "description": "Target binary architecture."
+        },
+        "points": {
+          "type": "number",
+          "description": "Score value between 10 and 2000."
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "Challenge technical overview."
+        },
+        "objective": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000,
+          "description": "Specific vulnerability or learning objective."
+        },
+        "zipPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Corresponding relative path inside Nightmare.zip."
+        },
+        "flagHash": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 hex digest of the target flag."
+        },
+        "flagHint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "description": "Format hint for flag verification."
+        },
+        "published": {
+          "type": "boolean",
+          "description": "Whether challenge is visible to players."
+        },
+        "mitigations": {
+          "type": "object",
+          "description": "Binary security properties (nx, pie, canary, relro)."
+        },
+        "exploitTemplate": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000,
+          "description": "Starter pwntools script or analysis template."
+        },
+        "authorUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Creator UID."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last modification server timestamp."
+        }
+      },
+      "required": [
+        "id",
+        "moduleNum",
+        "moduleName",
+        "title",
+        "category",
+        "difficulty",
+        "arch",
+        "points",
+        "summary",
+        "objective",
+        "zipPath",
+        "flagHash",
+        "flagHint",
+        "published",
+        "mitigations",
+        "exploitTemplate",
+        "authorUid",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserProgress": {
+      "title": "UserProgress",
+      "description": "Per-user challenge solve state, earned points, and personal exploit notes.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Owner user ID."
+        },
+        "handle": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "User handle snapshot for scoreboard."
+        },
+        "challengeId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Referenced challenge ID."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["unsolved", "in_progress", "solved"],
+          "description": "Solve status."
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 4000,
+          "description": "Exploit notes and offsets."
+        },
+        "pointsEarned": {
+          "type": "number",
+          "description": "Points credited upon solve (0..2000)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Initial progress timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last progress update timestamp."
+        }
+      },
+      "required": ["uid", "handle", "challengeId", "status", "notes", "pointsEarned", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Public operator profiles without PII."
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/UserPrivateAccount" },
+      "description": "Isolated PII storage accessible only by the account owner or administrators."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Trusted administrator membership lookup documents."
+    },
+    "/organizers/{userId}": {
+      "schema": { "$ref": "#/entities/OrganizerRecord" },
+      "description": "Trusted organizer membership lookup documents."
+    },
+    "/challenges/{challengeId}": {
+      "schema": { "$ref": "#/entities/Challenge" },
+      "description": "Nightmare and custom CTF challenges managed by organizers and admins."
+    },
+    "/progress/{progressId}": {
+      "schema": { "$ref": "#/entities/UserProgress" },
+      "description": "Per-player solve tracking and private notes."
+    }
+  }
+}

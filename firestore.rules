@@ -1,0 +1,358 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net (Default-Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Hardened Global Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Zero-read bootstrap admin check (strictly mandates email_verified == true)
+    function isBootstrapAdmin() {
+      return isEmailVerified() && request.auth.token.email == 'zezu1811@gmail.com';
+    }
+
+    // Authoritative RBAC helpers (single-document operations only, never inside allow list)
+    function isAdmin() {
+      return isEmailVerified() && (
+        isBootstrapAdmin() ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isOrganizerOrAdmin() {
+      return isAdmin() || (
+        isEmailVerified() &&
+        exists(/databases/$(database)/documents/organizers/$(request.auth.uid))
+      );
+    }
+
+    // 3. Entity Validation Blueprints (Anti-Update-Gap)
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll([
+          'uid', 'handle', 'displayName', 'teamName', 'role', 'requestedRole', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'handle', 'displayName', 'teamName', 'role', 'requestedRole', 'status', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && data.handle is string && data.handle.size() >= 2 && data.handle.size() <= 32 && data.handle.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80
+        && data.teamName is string && data.teamName.size() <= 64
+        && data.role in ['player', 'organizer', 'admin']
+        && data.requestedRole in ['none', 'organizer']
+        && data.status in ['active', 'suspended']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPrivateAccount(data) {
+      return data.keys().hasAll(['uid', 'email', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRoleGrant(data) {
+      return data.keys().hasAll(['uid', 'grantedBy', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'grantedBy', 'createdAt'])
+        && isValidId(data.uid)
+        && data.grantedBy is string && data.grantedBy.size() >= 1 && data.grantedBy.size() <= 128
+        && data.createdAt is timestamp;
+    }
+
+    function isValidMitigations(m) {
+      return m is map
+        && m.keys().hasAll(['nx', 'pie', 'canary', 'relro'])
+        && m.keys().hasOnly(['nx', 'pie', 'canary', 'relro'])
+        && m.nx is string && m.nx.size() >= 1 && m.nx.size() <= 32
+        && m.pie is string && m.pie.size() >= 1 && m.pie.size() <= 32
+        && m.canary is string && m.canary.size() >= 1 && m.canary.size() <= 32
+        && m.relro is string && m.relro.size() >= 1 && m.relro.size() <= 32;
+    }
+
+    function isValidChallenge(data) {
+      return data.keys().hasAll([
+          'id', 'moduleNum', 'moduleName', 'title', 'category', 'difficulty', 'arch',
+          'points', 'summary', 'objective', 'zipPath', 'flagHash', 'flagHint',
+          'published', 'mitigations', 'exploitTemplate', 'authorUid', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'moduleNum', 'moduleName', 'title', 'category', 'difficulty', 'arch',
+          'points', 'summary', 'objective', 'zipPath', 'flagHash', 'flagHint',
+          'published', 'mitigations', 'exploitTemplate', 'authorUid', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.moduleNum is string && data.moduleNum.size() >= 1 && data.moduleNum.size() <= 12
+        && data.moduleName is string && data.moduleName.size() >= 2 && data.moduleName.size() <= 100
+        && data.title is string && data.title.size() >= 2 && data.title.size() <= 120
+        && data.category in ['Reversing', 'Stack', 'ROP', 'Format', 'Heap', 'Mitigations']
+        && data.difficulty in ['Beginner', 'Intermediate', 'Advanced']
+        && data.arch is string && data.arch.size() >= 2 && data.arch.size() <= 32
+        && data.points is number && data.points >= 10 && data.points <= 2000
+        && data.summary is string && data.summary.size() >= 1 && data.summary.size() <= 2000
+        && data.objective is string && data.objective.size() >= 1 && data.objective.size() <= 1000
+        && data.zipPath is string && data.zipPath.size() >= 1 && data.zipPath.size() <= 256
+        && data.flagHash is string && data.flagHash.size() == 64 && data.flagHash.matches('^[a-f0-9]{64}$')
+        && data.flagHint is string && data.flagHint.size() >= 1 && data.flagHint.size() <= 160
+        && data.published is bool
+        && isValidMitigations(data.mitigations)
+        && data.exploitTemplate is string && data.exploitTemplate.size() >= 1 && data.exploitTemplate.size() <= 8000
+        && isValidId(data.authorUid)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidProgress(data) {
+      return data.keys().hasAll([
+          'uid', 'handle', 'challengeId', 'status', 'notes', 'pointsEarned', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'handle', 'challengeId', 'status', 'notes', 'pointsEarned', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && data.handle is string && data.handle.size() >= 2 && data.handle.size() <= 32 && data.handle.matches('^[a-zA-Z0-9_\\-]+$')
+        && isValidId(data.challengeId)
+        && data.status in ['unsolved', 'in_progress', 'solved']
+        && data.notes is string && data.notes.size() <= 4000
+        && data.pointsEarned is number && data.pointsEarned >= 0 && data.pointsEarned <= 2000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // 4. Collection Rules
+
+    // Public operator profiles (strictly NO PII)
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (
+        existing().status == 'active' || isOwner(userId) || isAdmin()
+      );
+
+      // Secure list query: evaluates resource.data directly without get()/exists()
+      allow list: if isSignedIn() && (
+        resource.data.status == 'active' ||
+        resource.data.uid == request.auth.uid ||
+        isBootstrapAdmin()
+      );
+
+      allow create: if isEmailVerified()
+        && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == userId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          // Standard self-registration: locked to player role and active status
+          (isOwner(userId) && incoming().role == 'player' && incoming().status == 'active') ||
+          // Bootstrap admin self-registration
+          (isOwner(userId) && isBootstrapAdmin() && incoming().role == 'admin' && incoming().status == 'active') ||
+          // Admin provisioning
+          isAdmin()
+        );
+
+      allow update: if isEmailVerified()
+        && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Tier 1: Admin can manage roles, status, and profile details
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'handle', 'displayName', 'teamName', 'role', 'requestedRole', 'status', 'updatedAt'
+          ])) ||
+          // Tier 2: Owner can update profile metadata and request organizer role, never self-assign role or status
+          (isOwner(userId)
+            && existing().status == 'active'
+            && incoming().role == existing().role
+            && incoming().status == existing().status
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'handle', 'displayName', 'teamName', 'requestedRole', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isAdmin() && isValidId(userId);
+
+      // Isolated PII subcollection
+      match /private/{docId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(docId) && (
+          isOwner(userId) || isAdmin()
+        );
+        allow list: if false;
+        allow create: if isEmailVerified()
+          && isValidId(userId)
+          && docId == 'account'
+          && isValidPrivateAccount(incoming())
+          && incoming().uid == userId
+          && incoming().updatedAt == request.time
+          && (isOwner(userId) || isAdmin());
+        allow update: if isEmailVerified()
+          && isValidId(userId)
+          && docId == 'account'
+          && isValidPrivateAccount(incoming())
+          && incoming().uid == existing().uid
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'updatedAt'])
+          && (isOwner(userId) || isAdmin());
+        allow delete: if isAdmin() && isValidId(userId) && isValidId(docId);
+      }
+    }
+
+    // Authoritative Admin Registry
+    match /admins/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if false;
+      allow create: if isEmailVerified()
+        && isValidId(userId)
+        && isValidRoleGrant(incoming())
+        && incoming().uid == userId
+        && incoming().createdAt == request.time
+        && isAdmin();
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(userId) && userId != request.auth.uid;
+    }
+
+    // Authoritative Organizer Registry
+    match /organizers/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if false;
+      allow create: if isEmailVerified()
+        && isValidId(userId)
+        && isValidRoleGrant(incoming())
+        && incoming().uid == userId
+        && incoming().createdAt == request.time
+        && isAdmin();
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // Nightmare & Custom CTF Challenges
+    match /challenges/{challengeId} {
+      allow get: if isSignedIn() && isValidId(challengeId) && (
+        existing().published == true || existing().authorUid == request.auth.uid || isOrganizerOrAdmin()
+      );
+
+      // Zero get()/exists() in allow list; enforces published / author / bootstrap admin directly
+      allow list: if isSignedIn() && (
+        resource.data.published == true ||
+        resource.data.authorUid == request.auth.uid ||
+        isBootstrapAdmin()
+      );
+
+      allow create: if isEmailVerified()
+        && isValidId(challengeId)
+        && isValidChallenge(incoming())
+        && incoming().id == challengeId
+        && incoming().authorUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isOrganizerOrAdmin();
+
+      allow update: if isEmailVerified()
+        && isValidId(challengeId)
+        && isValidChallenge(incoming())
+        && incoming().id == existing().id
+        && incoming().authorUid == existing().authorUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Tier 1: Admin can modify any challenge field
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'moduleNum', 'moduleName', 'title', 'category', 'difficulty', 'arch',
+            'points', 'summary', 'objective', 'zipPath', 'flagHash', 'flagHint',
+            'published', 'mitigations', 'exploitTemplate', 'updatedAt'
+          ])) ||
+          // Tier 2: Organizer can update challenge curriculum, mitigations, and publish state
+          (isOrganizerOrAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'moduleNum', 'moduleName', 'title', 'category', 'difficulty', 'arch',
+            'points', 'summary', 'objective', 'zipPath', 'flagHash', 'flagHint',
+            'published', 'mitigations', 'exploitTemplate', 'updatedAt'
+          ]))
+        );
+
+      allow delete: if isAdmin() && isValidId(challengeId);
+    }
+
+    // Per-Player Solve Progress & Notes
+    match /progress/{progressId} {
+      allow get: if isSignedIn() && isValidId(progressId) && (
+        existing().uid == request.auth.uid || existing().status == 'solved' || isOrganizerOrAdmin()
+      );
+
+      // Enforces owner or public solved scoreboard without get()/exists()
+      allow list: if isSignedIn() && (
+        resource.data.uid == request.auth.uid ||
+        resource.data.status == 'solved' ||
+        isBootstrapAdmin()
+      );
+
+      allow create: if isEmailVerified()
+        && isValidId(progressId)
+        && isValidProgress(incoming())
+        && incoming().uid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isEmailVerified()
+        && isValidId(progressId)
+        && isValidProgress(incoming())
+        && incoming().uid == existing().uid
+        && incoming().challengeId == existing().challengeId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Tier 1: Admin override (can correct terminal states)
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'handle', 'status', 'notes', 'pointsEarned', 'updatedAt'
+          ])) ||
+          // Tier 2a: Non-terminal progress update by owner
+          (isOwner(existing().uid)
+            && existing().status != 'solved'
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'handle', 'status', 'notes', 'pointsEarned', 'updatedAt'
+            ])
+          ) ||
+          // Tier 2b: Terminal state locking — once solved, owner may only update notes/handle
+          (isOwner(existing().uid)
+            && existing().status == 'solved'
+            && incoming().status == 'solved'
+            && incoming().pointsEarned == existing().pointsEarned
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'handle', 'notes', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isAdmin() && isValidId(progressId);
+    }
+  }
+}

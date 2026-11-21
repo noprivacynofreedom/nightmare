@@ -1,0 +1,6 @@
+{
+  "name": "Atlas CTF",
+  "description": "Binary exploitation and reverse engineering workbench integrating Nightmare.zip archives, interactive CTF tooling, and real-time multi-session Swarm coordination.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
